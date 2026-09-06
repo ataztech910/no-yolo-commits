@@ -172,8 +172,24 @@ fi
 # prefix per-repo at commit time instead of baking one in at install time.
 configured_prefix="NYC"
 if [ "$configured_prefix" = "AUTO" ]; then
-  prefix="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null \
-    | tr '[:lower:]' '[:upper:]' | tr -cs 'A-Z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//' | cut -c1-20)"
+  toplevel="$(git rev-parse --show-toplevel 2>/dev/null)"
+  prefix=""
+  # Prefer package.json's name (first 3 letters, scope dropped) when there
+  # is one — falls back to the repo directory name for non-Node projects,
+  # or if package.json has no usable "name".
+  if [ -n "$toplevel" ] && [ -f "$toplevel/package.json" ] && command -v node >/dev/null 2>&1; then
+    prefix="$(node -e '
+      try {
+        const pkg = require(process.argv[1]);
+        const name = String(pkg.name || "").replace(/^@[^/]+\//, "");
+        process.stdout.write(name.slice(0, 3).toUpperCase());
+      } catch (e) {}
+    ' "$toplevel/package.json" 2>/dev/null)"
+  fi
+  if [ -z "$prefix" ]; then
+    prefix="$(basename "$toplevel" 2>/dev/null \
+      | tr '[:lower:]' '[:upper:]' | tr -cs 'A-Z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//' | cut -c1-20)"
+  fi
   prefix="${prefix:-WIP}"
 else
   prefix="$configured_prefix"

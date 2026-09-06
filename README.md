@@ -39,7 +39,7 @@ If you're the "I have thirty repos and I am not doing this thirty times" type:
 npx no-yolo-commits init --global
 ```
 
-This wires up git's own [hook template mechanism](https://git-scm.com/docs/git-init#_template_directory) (`git config --global init.templateDir`) — every `git init` and `git clone` from then on gets the hook automatically, no husky, no per-project npm install. The branch prefix is derived from each repo's folder name at commit time (since one script now serves every project you touch).
+This wires up git's own [hook template mechanism](https://git-scm.com/docs/git-init#_template_directory) (`git config --global init.templateDir`) — every `git init` and `git clone` from then on gets the hook automatically, no husky, no per-project npm install. The branch prefix is derived per-repo at commit time (since one script now serves every project you touch): the first 3 letters of `package.json`'s `name` (scope dropped, e.g. `@acme/widgets` → `WID`) if there is one, otherwise the repo's folder name.
 
 Already-cloned repos won't retroactively pick it up — re-run `git init` inside one (safe, doesn't touch history or remotes) to copy it in. A project that later runs the regular per-project `init` gets its own `.husky/pre-commit`, which takes precedence over the global hook.
 
