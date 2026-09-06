@@ -57,8 +57,7 @@ Do NOT flag stylistic preferences. Do NOT flag pre-existing patterns already use
     } catch (e) {
       process.exit(2)
     }
-  ' "$review_tmpfile"
-  review_status=$?
+  ' "$review_tmpfile" && review_status=0 || review_status=$?
   rm -f "$review_tmpfile" 2>/dev/null || true
 
   if [ "$review_status" = "1" ]; then
