@@ -7,7 +7,7 @@
 if command -v claude >/dev/null 2>&1 && ! git diff --cached --quiet; then
   echo "→ Running AI code review on staged changes..."
 
-  review_prompt="You are reviewing staged git changes before they are committed, for a __STACK__ project. Inspect the staged changes (run \`git diff --cached\` yourself; read full files with the Read tool when a diff hunk needs more surrounding context) and flag ONLY real, high-confidence problems: type-safety holes (any/unsafe casts), missing error handling at real failure points, obvious bugs, broken framework patterns, dead or unused code introduced by this diff.
+  review_prompt="You are reviewing staged git changes before they are committed, for a Node.js CLI tool that generates git hooks (no build step, no runtime deps) project. Inspect the staged changes (run \`git diff --cached\` yourself; read full files with the Read tool when a diff hunk needs more surrounding context) and flag ONLY real, high-confidence problems: type-safety holes (any/unsafe casts), missing error handling at real failure points, obvious bugs, broken framework patterns, dead or unused code introduced by this diff.
 
 Do NOT flag stylistic preferences. Do NOT flag pre-existing patterns already used elsewhere in this codebase (check before flagging). Do NOT invent issues — if you are not confident something is a real problem, leave it out. Respond with ONLY JSON matching the schema, nothing else."
 
@@ -73,7 +73,7 @@ fi
 # --- Block direct commits to protected branches ---
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
-case " __PROTECTED__ " in
+case " main " in
   *" $branch "*) ;;
   *) exit 0 ;;
 esac
@@ -123,7 +123,7 @@ if [ -z "$slug" ]; then
 fi
 
 timestamp="$(date +%s)"
-new_branch="__PREFIX__-${timestamp}-${slug}"
+new_branch="NYC-${timestamp}-${slug}"
 new_branch="$(printf '%s' "$new_branch" | cut -c1-100)"
 
 branch_err_file="$(mktemp)"
