@@ -1,0 +1,125 @@
+#!/usr/bin/env sh
+
+# --- AI code review on staged changes ---
+# Fails the commit only on real, high-confidence findings. If Claude is
+# missing, times out, or errors, this fails OPEN (warns, does not block) —
+# a broken/unavailable review must never be the only thing stopping commits.
+if command -v claude >/dev/null 2>&1 && ! git diff --cached --quiet; then
+  echo "→ Running AI code review on staged changes..."
+
+  review_prompt="You are reviewing staged git changes before they are committed, for a __STACK__ project. Inspect the staged changes (run \`git diff --cached\` yourself; read full files with the Read tool when a diff hunk needs more surrounding context) and flag ONLY real, high-confidence problems: type-safety holes (any/unsafe casts), missing error handling at real failure points, obvious bugs, broken framework patterns, dead or unused code introduced by this diff.
+
+Do NOT flag stylistic preferences. Do NOT flag pre-existing patterns already used elsewhere in this codebase (check before flagging). Do NOT invent issues — if you are not confident something is a real problem, leave it out. Respond with ONLY JSON matching the schema, nothing else."
+
+  review_tmpfile="$(mktemp)"
+
+  (claude -p "$review_prompt" \
+    --output-format json \
+    --json-schema '{"type":"object","properties":{"blocking_issues":{"type":"array","items":{"type":"string"}}},"required":["blocking_issues"]}' \
+    --allowedTools "Bash(git diff*)" "Bash(git show*)" "Bash(git log*)" "Read" "Grep" "Glob" \
+    --disallowedTools "Write" "Edit" "MultiEdit" "NotebookEdit" \
+    --permission-mode bypassPermissions \
+    >"$review_tmpfile" 2>/dev/null; exit 0) &
+  review_pid=$!
+  (sleep 120; kill "$review_pid" >/dev/null 2>&1; exit 0) >/dev/null 2>&1 &
+  review_watcher_pid=$!
+  disown "$review_watcher_pid" >/dev/null 2>&1 || true
+
+  wait "$review_pid" >/dev/null 2>&1 || true
+  kill "$review_watcher_pid" >/dev/null 2>&1 || true
+  wait "$review_watcher_pid" >/dev/null 2>&1 || true
+
+  node -e '
+    const fs = require("fs")
+    try {
+      const data = JSON.parse(fs.readFileSync(process.argv[1], "utf-8"))
+      const issues = (data.structured_output && data.structured_output.blocking_issues) || []
+      if (issues.length > 0) {
+        console.error("")
+        console.error("⛔ AI review found blocking issues:")
+        for (const i of issues) console.error("  - " + i)
+        console.error("")
+        console.error("Fix these, or commit anyway with `git commit --no-verify`.")
+        process.exit(1)
+      }
+      process.exit(0)
+    } catch (e) {
+      process.exit(2)
+    }
+  ' "$review_tmpfile"
+  review_status=$?
+  rm -f "$review_tmpfile" 2>/dev/null || true
+
+  if [ "$review_status" = "1" ]; then
+    exit 1
+  elif [ "$review_status" = "2" ]; then
+    echo "⚠ AI review unavailable or timed out — continuing without it."
+  else
+    echo "✓ AI review found no blocking issues."
+  fi
+fi
+
+# --- Block direct commits to protected branches ---
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+
+case " __PROTECTED__ " in
+  *" $branch "*) ;;
+  *) exit 0 ;;
+esac
+
+echo "⛔ Direct commits to '$branch' are blocked — creating a branch for this commit..."
+
+fallback_slug() {
+  echo "changes-$(date +%s | tail -c 5)"
+}
+
+slug=""
+
+if command -v claude >/dev/null 2>&1; then
+  diff="$(git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)pnpm-lock.yaml' ':(exclude)*.svg' ':(exclude)*.png' 2>/dev/null | head -c 6000)"
+  diff="${diff:-}"
+
+  if [ -n "$diff" ]; then
+    tmpfile="$(mktemp)"
+    prompt="Summarize the following staged git diff as ONE short phrase in kebab-case (lowercase words separated by hyphens, no punctuation, no quotes), at most 8 words, describing what changed. Output ONLY the phrase, nothing else, no explanation."
+
+    (printf '%s' "$diff" | claude -p "$prompt" >"$tmpfile" 2>/dev/null; exit 0) &
+    claude_pid=$!
+    (sleep 25; kill "$claude_pid" >/dev/null 2>&1; exit 0) >/dev/null 2>&1 &
+    watcher_pid=$!
+    disown "$watcher_pid" >/dev/null 2>&1 || true
+
+    wait "$claude_pid" >/dev/null 2>&1 || true
+    kill "$watcher_pid" >/dev/null 2>&1 || true
+    wait "$watcher_pid" >/dev/null 2>&1 || true
+
+    raw="$(cat "$tmpfile" 2>/dev/null || true)"
+    rm -f "$tmpfile" 2>/dev/null || true
+
+    slug="$(printf '%s' "$raw" \
+      | tr '[:upper:]' '[:lower:]' \
+      | tr -cs 'a-z0-9' '-' \
+      | sed -e 's/^-*//' -e 's/-*$//' \
+      | cut -c1-60)"
+    slug="${slug:-}"
+  fi
+fi
+
+if [ -z "$slug" ]; then
+  slug="$(fallback_slug)"
+fi
+
+timestamp="$(date +%s)"
+new_branch="__PREFIX__-${timestamp}-${slug}"
+new_branch="$(printf '%s' "$new_branch" | cut -c1-100)"
+
+if ! git checkout -b "$new_branch" 2>/tmp/no-yolo-commits-error; then
+  echo "✗ Failed to create branch '$new_branch':"
+  cat /tmp/no-yolo-commits-error 2>/dev/null || true
+  rm -f /tmp/no-yolo-commits-error 2>/dev/null || true
+  echo "Commit aborted — create/switch to a feature branch manually and retry."
+  exit 1
+fi
+rm -f /tmp/no-yolo-commits-error 2>/dev/null || true
+
+echo "✓ Switched to '$new_branch' — continuing commit there."

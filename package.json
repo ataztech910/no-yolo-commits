@@ -1,0 +1,38 @@
+{
+  "name": "no-yolo-commits",
+  "version": "1.0.0",
+  "description": "AI pre-commit review (via the claude CLI) + a guard that auto-branches you off main/master instead of letting a direct commit land there.",
+  "keywords": [
+    "husky",
+    "git-hooks",
+    "pre-commit",
+    "ai-code-review",
+    "claude",
+    "claude-code"
+  ],
+  "license": "MIT",
+  "author": "ataztech910",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ataztech910/no-yolo-commits.git"
+  },
+  "homepage": "https://github.com/ataztech910/no-yolo-commits#readme",
+  "bugs": {
+    "url": "https://github.com/ataztech910/no-yolo-commits/issues"
+  },
+  "bin": {
+    "no-yolo-commits": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
