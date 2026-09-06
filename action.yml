@@ -1,0 +1,31 @@
+name: 'no-yolo-commits'
+description: 'AI review of a PR diff (via the claude CLI) + a zero-dependency secret scan. Fails the check only on real, high-confidence findings.'
+branding:
+  icon: 'shield'
+  color: 'purple'
+inputs:
+  anthropic-api-key:
+    description: 'Anthropic API key for the claude CLI. Pass it as a repo/org secret.'
+    required: true
+  stack:
+    description: 'One-line project description handed to the reviewer, e.g. "Next.js + TypeScript + Postgres"'
+    required: false
+    default: 'TypeScript'
+  model:
+    description: 'Optional claude model override for cost/speed control, e.g. "haiku"'
+    required: false
+    default: ''
+runs:
+  using: 'composite'
+  steps:
+    - name: Install claude CLI
+      shell: bash
+      run: npm install -g @anthropic-ai/claude-code
+
+    - name: Review PR diff
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        STACK: ${{ inputs.stack }}
+        MODEL: ${{ inputs.model }}
+      run: sh "${{ github.action_path }}/templates/ci-review.sh"
