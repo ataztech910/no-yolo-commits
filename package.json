@@ -1,6 +1,6 @@
 {
   "name": "no-yolo-commits",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI pre-commit review (via the claude CLI) + a guard that auto-branches you off main/master instead of letting a direct commit land there.",
   "keywords": [
     "husky",

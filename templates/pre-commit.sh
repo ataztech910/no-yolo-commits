@@ -13,13 +13,18 @@ Do NOT flag stylistic preferences. Do NOT flag pre-existing patterns already use
 
   review_tmpfile="$(mktemp)"
 
-  (claude -p "$review_prompt" \
+  # No subshell wrapper here on purpose: `(claude ...; exit 0) &` would make
+  # $! the wrapper's PID, not claude's — since the wrapper has more to do
+  # after claude exits, the shell can't tail-exec it, so killing $review_pid
+  # on timeout would kill the empty wrapper and leave claude itself running
+  # orphaned. Backgrounding claude directly makes $! the real PID.
+  claude -p "$review_prompt" \
     --output-format json \
     --json-schema '{"type":"object","properties":{"blocking_issues":{"type":"array","items":{"type":"string"}}},"required":["blocking_issues"]}' \
     --allowedTools "Bash(git diff*)" "Bash(git show*)" "Bash(git log*)" "Read" "Grep" "Glob" \
     --disallowedTools "Write" "Edit" "MultiEdit" "NotebookEdit" \
     --permission-mode bypassPermissions \
-    >"$review_tmpfile" 2>/dev/null; exit 0) &
+    >"$review_tmpfile" 2>/dev/null &
   review_pid=$!
   (sleep 120; kill "$review_pid" >/dev/null 2>&1; exit 0) >/dev/null 2>&1 &
   review_watcher_pid=$!
@@ -83,7 +88,9 @@ if command -v claude >/dev/null 2>&1; then
     tmpfile="$(mktemp)"
     prompt="Summarize the following staged git diff as ONE short phrase in kebab-case (lowercase words separated by hyphens, no punctuation, no quotes), at most 8 words, describing what changed. Output ONLY the phrase, nothing else, no explanation."
 
-    (printf '%s' "$diff" | claude -p "$prompt" >"$tmpfile" 2>/dev/null; exit 0) &
+    # Same reasoning as the review call above: background claude directly,
+    # no subshell wrapper, so $! is the real PID the timeout can kill.
+    printf '%s' "$diff" | claude -p "$prompt" >"$tmpfile" 2>/dev/null &
     claude_pid=$!
     (sleep 25; kill "$claude_pid" >/dev/null 2>&1; exit 0) >/dev/null 2>&1 &
     watcher_pid=$!
@@ -113,13 +120,14 @@ timestamp="$(date +%s)"
 new_branch="__PREFIX__-${timestamp}-${slug}"
 new_branch="$(printf '%s' "$new_branch" | cut -c1-100)"
 
-if ! git checkout -b "$new_branch" 2>/tmp/no-yolo-commits-error; then
+branch_err_file="$(mktemp)"
+if ! git checkout -b "$new_branch" 2>"$branch_err_file"; then
   echo "✗ Failed to create branch '$new_branch':"
-  cat /tmp/no-yolo-commits-error 2>/dev/null || true
-  rm -f /tmp/no-yolo-commits-error 2>/dev/null || true
+  cat "$branch_err_file" 2>/dev/null || true
+  rm -f "$branch_err_file" 2>/dev/null || true
   echo "Commit aborted — create/switch to a feature branch manually and retry."
   exit 1
 fi
-rm -f /tmp/no-yolo-commits-error 2>/dev/null || true
+rm -f "$branch_err_file" 2>/dev/null || true
 
 echo "✓ Switched to '$new_branch' — continuing commit there."
