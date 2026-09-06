@@ -60,8 +60,7 @@ Do NOT flag stylistic preferences. Do NOT flag pre-existing patterns already use
     --json-schema '{"type":"object","properties":{"blocking_issues":{"type":"array","items":{"type":"string"}}},"required":["blocking_issues"]}' \
     --allowedTools "Bash(git diff*)" "Bash(git show*)" "Bash(git log*)" "Read" "Grep" "Glob" \
     --disallowedTools "Write" "Edit" "MultiEdit" "NotebookEdit" \
-    --permission-mode bypassPermissions \
-     \
+    --permission-mode bypassPermissions  \
     >"$review_tmpfile" 2>/dev/null &
   review_pid=$!
   (sleep 120; kill "$review_pid" >/dev/null 2>&1; exit 0) >/dev/null 2>&1 &
